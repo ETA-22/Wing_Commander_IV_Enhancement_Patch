@@ -260,6 +260,8 @@ BOOL(*wc4_save_game)(DWORD save_num, const char* title) = nullptr;
 BOOL(*wc4_delete_file)(const char* file_path) = nullptr;;
 char* p_wc4_cmd_mission_name = nullptr;
 
+BOOL(*wc4_exit_game)(BOOL exit_code) = nullptr;
+
 
 #ifdef VERSION_WC4_DVD
 //_______________
@@ -505,6 +507,8 @@ void WC4W_Setup() {
     wc4_save_game = (BOOL(*)(DWORD, const char*))0x4515C0;
     wc4_delete_file = (BOOL(*)(const char*))0x4AC190;
     p_wc4_cmd_mission_name = (char*)0x4C4428;
+
+    wc4_exit_game = (BOOL(*)(BOOL))0x4A2470;
 }
 
 #else
@@ -750,5 +754,7 @@ void WC4W_Setup() {
     wc4_save_game = (BOOL(*)(DWORD, const char*))0x479180;
     wc4_delete_file = (BOOL(*)(const char*))0x4B7496;
     p_wc4_cmd_mission_name = (char*)0x4D3088;
+
+    wc4_exit_game = (BOOL(*)(BOOL))0x4AF039;
 }
 #endif

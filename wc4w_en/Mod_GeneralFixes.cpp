@@ -824,6 +824,23 @@ void Modifications_Replay_Last_Mission() {
 }
 
 
+//_____________________________________________________________
+static void __declspec(naked) check_command_line_overides(void) {
+
+    __asm {
+        pushad
+        call Check_Command_Line_Overrides
+        popad
+
+#ifdef VERSION_WC4_DVD
+        and ecx, 0xFF
+#else
+        and eax, 0xFF
+#endif
+        ret
+    }
+}
+
 /*
 //_____________________________________________
 static void Proccess_Object(DWORD** func_array) {
@@ -1296,6 +1313,10 @@ void Modifications_GeneralFixes() {
     FuncWrite32(0x49AB7D, 0x0D130204, (DWORD)&test_texture_address_2);
     MemWrite32(0x49AB81, 0x4B943C, 0x90909090);
     //----------------------------------------------------------------------------
+
+
+    MemWrite16(0x4A2E38, 0xE181, 0xE890);
+    FuncWrite32(0x4A2E3A, 0xFF, (DWORD)&check_command_line_overides);
 }
 
 #else
@@ -1740,9 +1761,11 @@ void Modifications_GeneralFixes() {
     //----------------------------------------------------------------------------
 
 
+    MemWrite8(0x4B0673, 0x25, 0xE8);
+    FuncWrite32(0x4B0674, 0xFF, (DWORD)&check_command_line_overides);
+
     //MemWrite8(0x4A1BB2, 0x8B, 0xE8);
     //FuncWrite32(0x4A1BB3, 0xFFC88B18, (DWORD)&processes_object);
     //MemWrite16(0x4A1BB7, 0x0453, 0x9090);
-
 }
 #endif

@@ -464,3 +464,5 @@ extern LONG(*wc4_draw_line)(DRAW_BUFFER_MAIN* p_db, LONG x1, LONG y1, LONG x2, L
 
 extern BOOL(*wc4_save_game)(DWORD save_num, const char* title);
 extern BOOL(*wc4_delete_file)(const char* file_path);
+
+extern BOOL(*wc4_exit_game)(BOOL exit_code);

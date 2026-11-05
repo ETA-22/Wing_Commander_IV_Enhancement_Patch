@@ -248,7 +248,7 @@ static HWND __stdcall CreateWindowEx_DPIAware(DWORD dwExStyle, LPCSTR lpClassNam
 //_________________________________
 static BOOL Window_Setup(HWND hwnd) {
     
-    Check_Command_Line_Overrides();
+    //Check_Command_Line_Overrides();
 
     if (!*p_wc4_is_windowed) {
         if (ConfigReadInt_InGame(L"MAIN", L"WINDOWED", CONFIG_MAIN_WINDOWED))
