@@ -419,6 +419,94 @@ static void __declspec(naked) modify_object_lod_dist(void) {
 }
 
 
+#ifdef VERSION_WC4_DVD
+// Open hangar bays.
+// The hangar bays on carriers and bases are "SUPR" super-objects. A painted cover face on the hull is listed in the
+// model's "SUPR" chunk and is swapped for a separate fly-through hangar model.
+// On most models only the cover at one end of the hangar was listed. The cover at the other end is a plain face, so from
+// that side the bay is a flat texture until you fly through it.
+// The table below adds the missing covers. Each entry is matched on the existing record (face + super-object name), and
+// was checked against the model geometry: the two covers face in opposite directions at either end of the hangar model.
+
+#pragma pack(push, 1)
+struct SUPR_RECORD {
+    INT16 face;
+    char super_object[8];
+    LONG unk;//always -256 in the game data
+};
+#pragma pack(pop)
+
+struct SUPR_MISSING_COVER {
+    INT16 listed_face;
+    const char* super_object;
+    INT16 missing_face;
+};
+
+static const SUPR_MISSING_COVER supr_missing_covers[] = {
+    { 467, "INTSUPX", 464 },    //INTR2, the Intrepid.
+    { 124, "INTSUPX", 125 },    //INTRP4, Intrepid variant.
+    { 485, "BLCSUPX", 480 },    //BLCAR2, Border Worlds carrier.
+    { 214, "BLBSUPX", 221 },    //BLBASE, Border Worlds base.
+    { 278, "BPDEPSUP", 232 },   //BPDEPOT, depot.
+    { 87, "KSUP", 124 },        //KBASE, Kilrathi base.
+    { 483, "VESUPX", 503 },     //VES3, Vesuvius class.
+    { 402, "VESUPX", 214 },     //STHEL4, Vesuvius class.
+};
+
+static void* (*wc4_allocate_mem01)(DWORD) = (void* (*)(DWORD))0x4A1C90;//matching free = wc4_dealocate_mem01
+
+
+//_______________________________________________________________
+static void Add_Missing_Hangar_Covers(void* p_poly_class) {
+    SUPR_RECORD** pp_records = (SUPR_RECORD**)((BYTE*)p_poly_class + 0xAC);
+    LONG* p_num_records = (LONG*)((BYTE*)p_poly_class + 0xB0);
+    if (*pp_records == nullptr || *p_num_records <= 0)
+        return;
+
+    SUPR_RECORD extra[_countof(supr_missing_covers)]{};
+    LONG num_extra = 0;
+    for (LONG i = 0; i < *p_num_records; i++) {
+        SUPR_RECORD* rec = &(*pp_records)[i];
+        for (auto& cover : supr_missing_covers) {
+            if (rec->face != cover.listed_face || strncmp(rec->super_object, cover.super_object, 8) != 0)
+                continue;
+            bool listed = false;
+            for (LONG j = 0; j < *p_num_records; j++) {
+                if ((*pp_records)[j].face == cover.missing_face)
+                    listed = true;
+            }
+            if (!listed) {
+                extra[num_extra] = *rec;
+                extra[num_extra].face = cover.missing_face;
+                num_extra++;
+            }
+        }
+    }
+    if (num_extra == 0)
+        return;
+
+    SUPR_RECORD* records = (SUPR_RECORD*)wc4_allocate_mem01((*p_num_records + num_extra) * sizeof(SUPR_RECORD));
+    if (records == nullptr)
+        return;
+    memcpy(records, *pp_records, *p_num_records * sizeof(SUPR_RECORD));
+    memcpy(&records[*p_num_records], extra, num_extra * sizeof(SUPR_RECORD));
+    wc4_dealocate_mem01(*pp_records);
+    *pp_records = records;
+    *p_num_records += num_extra;
+    Debug_Info("Add_Missing_Hangar_Covers: added %d cover(s) for super-object %.8s", num_extra, extra[0].super_object);
+}
+
+
+//________________________________________________________________________________________
+static void(__thiscall* wc4_load_supr_chunk)(void*, void*) = (void(__thiscall*)(void*, void*))0x41E3C0;
+
+static void __fastcall Load_SUPR_Chunk(void* p_poly_class, void* edx, void* p_file) {
+    wc4_load_supr_chunk(p_poly_class, p_file);
+    Add_Missing_Hangar_Covers(p_poly_class);
+}
+#endif
+
+
 //__________________________________________________________
 static LONG MULTI_ARG1_BY_256_DIV_ARG2(LONG arg1, LONG arg2) {
     LONGLONG val = (LONGLONG)arg1 << 8;
@@ -915,6 +1003,15 @@ void Modifications_GeneralFixes() {
 
     MemWrite16(0x41F507, 0xBD8B, 0xE890);
     FuncWrite32(0x41F509, 0x90, (DWORD)&modify_object_lod_dist);
+
+    if (ConfigReadInt(L"SPACE", L"OPEN_HANGAR_BAYS", CONFIG_SPACE_OPEN_HANGAR_BAYS)) {
+        //Add the missing hangar bay covers to the "SUPR" super-object list when a model is loaded.
+        FuncReplace32(0x41F619, 0xFFFFEDA3, (DWORD)&Load_SUPR_Chunk);
+        //A super-object is only drawn in place of its cover face when one of its parts reports being visible through it.
+        //From the outside, looking at a cover added above, they don't. Always draw the super-object when its cover face is drawn.
+        MemWrite16(0x45FA0E, 0x2E74, 0x9090);//quad cover faces
+        MemWrite16(0x46269E, 0x2E74, 0x9090);//triangle cover faces
+    }
 
 
     //-----Replacement integer math function-------------------------------
