@@ -1,0 +1,30 @@
+# Cross-compile toolchain: clang-cl + lld-link + llvm-rc targeting 32-bit Windows (MSVC ABI),
+# using the Windows SDK and MSVC CRT splatted by xwin (see tools/linux/bootstrap.sh).
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86)
+
+if(DEFINED ENV{WC4_DEPS})
+  set(WC4_DEPS "$ENV{WC4_DEPS}")
+else()
+  get_filename_component(WC4_DEPS "${CMAKE_CURRENT_LIST_DIR}/../.deps" ABSOLUTE)
+endif()
+set(XWIN "${WC4_DEPS}/xwin")
+if(NOT EXISTS "${XWIN}/crt/include")
+  message(FATAL_ERROR "Windows SDK not found in ${XWIN}. Run tools/linux/bootstrap.sh first.")
+endif()
+
+set(CMAKE_C_COMPILER clang-cl)
+set(CMAKE_CXX_COMPILER clang-cl)
+set(CMAKE_LINKER lld-link)
+set(CMAKE_RC_COMPILER llvm-rc)
+set(CMAKE_MT llvm-mt)
+
+set(_tgt "--target=i686-pc-windows-msvc")
+set(_inc "/imsvc${XWIN}/crt/include /imsvc${XWIN}/sdk/include/ucrt /imsvc${XWIN}/sdk/include/um /imsvc${XWIN}/sdk/include/shared /imsvc${XWIN}/sdk/include/winrt /imsvc${XWIN}/sdk/include/cppwinrt")
+set(CMAKE_C_FLAGS_INIT "${_tgt} ${_inc}")
+set(CMAKE_CXX_FLAGS_INIT "${_tgt} ${_inc}")
+set(CMAKE_RC_FLAGS_INIT "/I${XWIN}/sdk/include/um /I${XWIN}/sdk/include/shared /I${XWIN}/sdk/include/ucrt /I${XWIN}/crt/include")
+set(_libp "/libpath:${XWIN}/crt/lib/x86 /libpath:${XWIN}/sdk/lib/um/x86 /libpath:${XWIN}/sdk/lib/ucrt/x86")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "${_libp}")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "${_libp}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)

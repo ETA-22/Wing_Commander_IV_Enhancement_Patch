@@ -1,0 +1,35 @@
+// Linux/clang-cl build only (not used by the Visual Studio project).
+//
+// clang does not support C++ coroutines for i686-pc-windows-msvc, so the MSVC STL never
+// defines __cpp_lib_coroutine and C++/WinRT's base.h falls back to <experimental/coroutine>,
+// which refuses to compile under clang. wc4w_en never uses co_await/co_return; C++/WinRT
+// only needs these names to exist. This header shadows the STL one and declares inert stubs.
+#pragma once
+#if !defined(__clang__) || defined(__cpp_impl_coroutine)
+#include_next <experimental/coroutine>
+#else
+#include <cstddef>
+namespace std::experimental {
+template <class P = void> struct coroutine_handle;
+template <> struct coroutine_handle<void> {
+    void* p = nullptr;
+    coroutine_handle() noexcept = default;
+    coroutine_handle(std::nullptr_t) noexcept {}
+    static coroutine_handle from_address(void* a) noexcept { coroutine_handle h; h.p = a; return h; }
+    void* address() const noexcept { return p; }
+    explicit operator bool() const noexcept { return p != nullptr; }
+    bool done() const noexcept { return true; }
+    void resume() const {}
+    void operator()() const {}
+    void destroy() const {}
+};
+template <class P> struct coroutine_handle : coroutine_handle<void> {
+    static coroutine_handle from_address(void* a) noexcept { coroutine_handle h; h.p = a; return h; }
+    static coroutine_handle from_promise(P&) noexcept { return {}; }
+    P& promise() const { return *static_cast<P*>(p); }
+};
+template <class R, class... A> struct coroutine_traits { using promise_type = typename R::promise_type; };
+struct suspend_always { bool await_ready() const noexcept { return false; } void await_suspend(coroutine_handle<>) const noexcept {} void await_resume() const noexcept {} };
+struct suspend_never  { bool await_ready() const noexcept { return true;  } void await_suspend(coroutine_handle<>) const noexcept {} void await_resume() const noexcept {} };
+}
+#endif
