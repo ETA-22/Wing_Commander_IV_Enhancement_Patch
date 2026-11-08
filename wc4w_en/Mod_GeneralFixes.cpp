@@ -503,25 +503,47 @@ static void Add_Missing_Hangar_Covers(void* p_poly_class) {
 // Face depth sorting.
 // Space is drawn back to front without a depth buffer. Every face goes into one list sorted on a depth key, which the game
 // takes from the face's farthest vertex. A large face next to small ones then often sorts behind or in front of them wrongly.
-// FACE_DEPTH_SORT=1 (default) uses the average depth of the face's vertices instead, 0 keeps the original farthest-vertex key.
+// FACE_DEPTH_SORT=1 (default) uses the average depth of the face's vertices instead, except for faces whose depth span is more
+// than half their average distance (hangar walls and floors around the camera, big plates seen nearly edge on). Those keep the
+// farthest vertex: their average comes out too near, and they would be drawn over ships inside or behind them.
+// 0 keeps the original farthest-vertex key for all faces.
 // Face draw items: [this+0x8], [this+0xC], [this+0x10] (and [this+0x14] for quads) point to projected vertices, depth at +0xC.
 // The key is returned and stored in the global the draw node constructors copy it from.
 static LONG* p_wc4_face_depth_key = (LONG*)0x4CBAEC;
 
 #define FACE_VERTEX_DEPTH(p_face, offset) (*(LONG*)(((BYTE**)(p_face))[(offset) / 4] + 0xC))
 
+//___________________________________________________________
+static LONG Face_Depth_Key(const LONG* depth, int num_vertices) {
+    LONG min_z = depth[0];
+    LONG max_z = depth[0];
+    LONGLONG sum = 0;
+    for (int i = 0; i < num_vertices; i++) {
+        if (depth[i] < min_z)
+            min_z = depth[i];
+        if (depth[i] > max_z)
+            max_z = depth[i];
+        sum += depth[i];
+    }
+    LONGLONG average = sum / num_vertices;
+    if (average <= 0 || ((LONGLONG)max_z - min_z) * 2 > average)
+        return max_z;
+    return (LONG)average;
+}
+
+
 //______________________________________________________
-static LONG __fastcall Quad_Depth_Key_Average(void* p_face) {
-    LONGLONG sum = (LONGLONG)FACE_VERTEX_DEPTH(p_face, 0x8) + FACE_VERTEX_DEPTH(p_face, 0xC) + FACE_VERTEX_DEPTH(p_face, 0x10) + FACE_VERTEX_DEPTH(p_face, 0x14);
-    *p_wc4_face_depth_key = (LONG)(sum / 4);
+static LONG __fastcall Quad_Depth_Key(void* p_face) {
+    LONG depth[4] = { FACE_VERTEX_DEPTH(p_face, 0x8), FACE_VERTEX_DEPTH(p_face, 0xC), FACE_VERTEX_DEPTH(p_face, 0x10), FACE_VERTEX_DEPTH(p_face, 0x14) };
+    *p_wc4_face_depth_key = Face_Depth_Key(depth, 4);
     return *p_wc4_face_depth_key;
 }
 
 
 //_____________________________________________________
-static LONG __fastcall Tri_Depth_Key_Average(void* p_face) {
-    LONGLONG sum = (LONGLONG)FACE_VERTEX_DEPTH(p_face, 0x8) + FACE_VERTEX_DEPTH(p_face, 0xC) + FACE_VERTEX_DEPTH(p_face, 0x10);
-    *p_wc4_face_depth_key = (LONG)(sum / 3);
+static LONG __fastcall Tri_Depth_Key(void* p_face) {
+    LONG depth[3] = { FACE_VERTEX_DEPTH(p_face, 0x8), FACE_VERTEX_DEPTH(p_face, 0xC), FACE_VERTEX_DEPTH(p_face, 0x10) };
+    *p_wc4_face_depth_key = Face_Depth_Key(depth, 3);
     return *p_wc4_face_depth_key;
 }
 
@@ -1043,11 +1065,11 @@ void Modifications_GeneralFixes() {
     }
 
     if (ConfigReadInt(L"SPACE", L"FACE_DEPTH_SORT", CONFIG_SPACE_FACE_DEPTH_SORT) == 1) {
-        //Replace the face depth key functions (farthest vertex) with the average vertex depth. Used by all quad and triangle face types.
+        //Replace the face depth key functions (farthest vertex) with the average/farthest hybrid above. Used by all quad and triangle face types.
         MemWrite8(0x45F7D0, 0x8B, 0xE9);//jmp
-        FuncWrite32(0x45F7D1, 0x518B0841, (DWORD)&Quad_Depth_Key_Average);
+        FuncWrite32(0x45F7D1, 0x518B0841, (DWORD)&Quad_Depth_Key);
         MemWrite8(0x462470, 0x8B, 0xE9);//jmp
-        FuncWrite32(0x462471, 0x518B0841, (DWORD)&Tri_Depth_Key_Average);
+        FuncWrite32(0x462471, 0x518B0841, (DWORD)&Tri_Depth_Key);
     }
 
 
