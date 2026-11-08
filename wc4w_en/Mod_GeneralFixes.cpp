@@ -1072,6 +1072,16 @@ void Modifications_GeneralFixes() {
         FuncWrite32(0x462471, 0x518B0841, (DWORD)&Tri_Depth_Key);
     }
 
+    if (ConfigReadInt(L"SPACE", L"SORT_FACES_ACROSS_OBJECTS", CONFIG_SPACE_SORT_FACES_ACROSS_OBJECTS)) {
+        //The space draw list is sorted in two levels: each object (ship, turret, parked craft, crate) opens its own group, groups are
+        //ordered by the object's depth, and faces are only sorted within their group. So attached pieces and craft inside a hangar
+        //are drawn entirely in front of or behind the ship they sit on. Never open a new group (0x47F7A0 -> ret 8): all faces stay in
+        //the first group and are sorted together by their own depth keys. The list already supports a single group.
+        static unsigned char begin_group_expected[] = { 0x56, 0x8B, 0xF1 };//push esi; mov esi, ecx
+        static unsigned char begin_group_ret[] = { 0xC2, 0x08, 0x00 };//ret 8
+        MemWriteString(0x47F7A0, begin_group_expected, begin_group_ret, 3);
+    }
+
 
     //-----Replacement integer math function-------------------------------
     //originals causing crashes when imul/idiv were overflowing.
