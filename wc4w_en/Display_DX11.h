@@ -134,6 +134,8 @@ public:
     BUFFER_DX(UINT in_numConstantBuffers, bool in_isUpdatedOften, UINT in_ByteWidth) {
         ByteWidth = in_ByteWidth;
         isUpdatedOften = in_isUpdatedOften;
+        numConstantBuffers = 0;
+        lpd3dConstantBuffers = nullptr;
         Create_ConstantBuffers(in_numConstantBuffers);
 
     }
