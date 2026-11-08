@@ -21,6 +21,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #include "pch.h"
+#include <math.h>
 #include "modifications.h"
 #include "memwrite.h"
 #include "configTools.h"
@@ -545,6 +546,53 @@ static LONG __fastcall Tri_Depth_Key(void* p_face) {
     LONG depth[3] = { FACE_VERTEX_DEPTH(p_face, 0x8), FACE_VERTEX_DEPTH(p_face, 0xC), FACE_VERTEX_DEPTH(p_face, 0x10) };
     *p_wc4_face_depth_key = Face_Depth_Key(depth, 3);
     return *p_wc4_face_depth_key;
+}
+
+
+// Quad face normals.
+// When a model is loaded, each face's normal is computed from its first three vertices only (0x45F1A0: cross of v0-v2 and v0-v1,
+// normalised, stored at [face+0x1C]). The normal is used to cull faces facing away from the camera. On a quad that is concave or
+// nearly straight at v1, or not flat, the first three vertices give a wrong normal and the face is culled while facing the camera,
+// leaving holes in the hull (several quads on each Lexington model, under the bow, midsection and on top near the bow).
+// For quads, replace it with a normal from all four vertices (Newell's method), with the same length and handedness as the original.
+// Quad face vertices: [face+0x34], [face+0x38], [face+0x3C], [face+0x40], each pointing to x, y, z (LONG).
+static void(__thiscall* wc4_face_compute_normal)(void*) = (void(__thiscall*)(void*))0x45F1A0;
+
+//_________________________________________________________________________________________
+static void Newell_Normal(LONG** v, int num_vertices, double* nx, double* ny, double* nz) {
+    *nx = 0; *ny = 0; *nz = 0;
+    for (int i = 0; i < num_vertices; i++) {
+        LONG* a = v[i];
+        LONG* b = v[(i + 1) % num_vertices];
+        *nx += ((double)a[1] - b[1]) * ((double)a[2] + b[2]);
+        *ny += ((double)a[2] - b[2]) * ((double)a[0] + b[0]);
+        *nz += ((double)a[0] - b[0]) * ((double)a[1] + b[1]);
+    }
+}
+
+
+//_____________________________________________________
+static void __fastcall Quad_Compute_Normal(void* p_face) {
+    wc4_face_compute_normal(p_face);
+
+    LONG* normal = (LONG*)((BYTE*)p_face + 0x1C);
+    LONG* v[4];
+    for (int i = 0; i < 4; i++)
+        v[i] = *(LONG**)((BYTE*)p_face + 0x34 + i * 4);
+
+    double length = sqrt((double)normal[0] * normal[0] + (double)normal[1] * normal[1] + (double)normal[2] * normal[2]);
+    double nx3 = 0, ny3 = 0, nz3 = 0;
+    Newell_Normal(v, 3, &nx3, &ny3, &nz3);//same three vertices the game used, to match its handedness.
+    double nx = 0, ny = 0, nz = 0;
+    Newell_Normal(v, 4, &nx, &ny, &nz);
+    double length4 = sqrt(nx * nx + ny * ny + nz * nz);
+    double side = normal[0] * nx3 + normal[1] * ny3 + normal[2] * nz3;
+    if (length == 0 || length4 == 0 || side == 0)
+        return;
+    double scale = (side > 0 ? length : -length) / length4;
+    normal[0] = (LONG)floor(nx * scale + 0.5);
+    normal[1] = (LONG)floor(ny * scale + 0.5);
+    normal[2] = (LONG)floor(nz * scale + 0.5);
 }
 
 
@@ -1080,6 +1128,12 @@ void Modifications_GeneralFixes() {
         static unsigned char begin_group_expected[] = { 0x56, 0x8B, 0xF1 };//push esi; mov esi, ecx
         static unsigned char begin_group_ret[] = { 0xC2, 0x08, 0x00 };//ret 8
         MemWriteString(0x47F7A0, begin_group_expected, begin_group_ret, 3);
+    }
+
+    if (ConfigReadInt(L"SPACE", L"FIX_QUAD_NORMALS", CONFIG_SPACE_FIX_QUAD_NORMALS)) {
+        //Compute quad normals from all four vertices, see Quad_Compute_Normal.
+        FuncReplace32(0x483D10, 0xFFFDB48C, (DWORD)&Quad_Compute_Normal);//ordinary quad faces
+        FuncReplace32(0x45F351, 0xFFFFFE4B, (DWORD)&Quad_Compute_Normal);//SUPR (hangar bay cover) quad faces
     }
 
 
