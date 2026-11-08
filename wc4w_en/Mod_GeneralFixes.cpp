@@ -460,22 +460,25 @@ static void* (*wc4_allocate_mem01)(DWORD) = (void* (*)(DWORD))0x4A1C90;//matchin
 static void Add_Missing_Hangar_Covers(void* p_poly_class) {
     SUPR_RECORD** pp_records = (SUPR_RECORD**)((BYTE*)p_poly_class + 0xAC);
     LONG* p_num_records = (LONG*)((BYTE*)p_poly_class + 0xB0);
-    if (*pp_records == nullptr || *p_num_records <= 0)
+    if (*pp_records == nullptr || *p_num_records <= 0 || *p_num_records > 0x1000)
         return;
 
     SUPR_RECORD extra[_countof(supr_missing_covers)]{};
+    bool applied[_countof(supr_missing_covers)]{};//each table entry adds at most one record, even if the chunk lists a face twice.
     LONG num_extra = 0;
     for (LONG i = 0; i < *p_num_records; i++) {
         SUPR_RECORD* rec = &(*pp_records)[i];
-        for (auto& cover : supr_missing_covers) {
-            if (rec->face != cover.listed_face || strncmp(rec->super_object, cover.super_object, 8) != 0)
+        for (size_t c = 0; c < _countof(supr_missing_covers); c++) {
+            const SUPR_MISSING_COVER& cover = supr_missing_covers[c];
+            if (applied[c] || rec->face != cover.listed_face || strncmp(rec->super_object, cover.super_object, 8) != 0)
                 continue;
+            applied[c] = true;
             bool listed = false;
             for (LONG j = 0; j < *p_num_records; j++) {
                 if ((*pp_records)[j].face == cover.missing_face)
                     listed = true;
             }
-            if (!listed) {
+            if (!listed && num_extra < (LONG)_countof(extra)) {
                 extra[num_extra] = *rec;
                 extra[num_extra].face = cover.missing_face;
                 num_extra++;
