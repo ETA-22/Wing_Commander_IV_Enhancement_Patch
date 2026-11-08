@@ -528,6 +528,7 @@ public:
 			if (NonRoamableId == joystick->Get_NonRoamableId())
 				return joystick;
 		}
+		return nullptr;
 	};
 	void Setup();
 	void Update();
